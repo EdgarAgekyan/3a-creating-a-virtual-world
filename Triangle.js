@@ -102,7 +102,7 @@ function drawTriangle3DUV(vertices, uv) {
   // Enable the assignment to a_Position variable
   gl.enableVertexAttribArray(a_Position);
 
-  gl.drawArrays(gl.TRIANGLES, 0, n);
+  // gl.drawArrays(gl.TRIANGLES, 0, n);
 
 
   // Creating a buffer for UV

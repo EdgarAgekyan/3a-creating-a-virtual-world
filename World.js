@@ -20,6 +20,7 @@ var FSHADER_SOURCE = `
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
+  uniform sampler2D u_Sampler1;
   uniform int u_whichTexture;
   void main() {
     if (u_whichTexture == -2) {
@@ -28,7 +29,10 @@ var FSHADER_SOURCE = `
       gl_FragColor = vec4(v_UV, 1.0, 1.0); // Use UV debug color
     } else if (u_whichTexture == 0) {
       gl_FragColor = texture2D(u_Sampler0, v_UV); // use texture0
-    } else {
+    } else if (u_whichTexture == -3) {
+      gl_FragColor = texture2D(u_Sampler1, v_UV); // use texture1
+    }
+    else {
       gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0); // error, put redish
     }
   }`
@@ -47,6 +51,8 @@ let u_GlobalRotateMatrix;
 let u_Sampler0;
 let u_whichTexture;
 let texture;
+let groundTexture;
+let u_Sampler1;
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -127,6 +133,12 @@ function connectVariablesToGLSL() {
     return;
   }
 
+  u_Sampler1 = gl.getUniformLocation(gl.program, 'u_Sampler1');
+  if (!u_Sampler1) {
+    console.log('Failed to get the storage location of u_Sampler1');
+    return;
+  }
+
   u_whichTexture = gl.getUniformLocation(gl.program, 'u_whichTexture');
   if (!u_whichTexture) {
     console.log('Failed to get the storage location of u_whichTexture');
@@ -185,6 +197,8 @@ let g_rightFoot = 0;
 
 let g_shiftClick = 0;
 let g_shiftAnimation = 0;
+
+let g_camera;
 
 // Set up actions for the HTML UI elements
 function addActionsForHtmlUI() {
@@ -256,6 +270,18 @@ function initTextures() {
 
   image.src = 'sky.jpg';
 
+  var image2 = new Image();
+  if (!image2) {
+    console.log('Failed to create the image object');
+    return false;
+  }
+  image2.onload = function() {sendImageToTEXTURE1(image2);}
+
+  image2.src = 'ground.jpg';
+
+
+  
+
   return true;
 
 }
@@ -277,6 +303,23 @@ function sendImageToTEXTURE0(image) {
   console.log('finished loadTexture');
 }
 
+function sendImageToTEXTURE1(image) {
+  groundTexture = gl.createTexture();
+  if (!groundTexture) {
+    console.log('Failed to create the groundTexture object');
+    return false;
+  }
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, groundTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+  gl.uniform1i(u_Sampler1, 1);
+
+  console.log('finished loadTexture');
+}
+
 
 function main() {
 
@@ -287,6 +330,8 @@ function main() {
 
   // Set up actions for the HTML UI elements
   addActionsForHtmlUI();
+
+  document.onkeydown = keydown;
 
   initTextures();
 
@@ -301,6 +346,24 @@ function main() {
   // Clear <canvas>
   // renderAllShapes();
   requestAnimationFrame(tick);
+}
+
+function keydown(ev) {
+  if (ev.keyCode == 39) {
+    g_camera.eye.elements[0] += 0.2;
+  }
+  else if (ev.keyCode == 37) {
+    g_camera.eye.elements[0] -= 0.2;
+  }
+  else if (ev.keyCode == 38) {
+    g_camera.eye.elements[2] -= 0.2;
+  }
+  else if (ev.keyCode == 40) {
+    g_camera.eye.elements[2] += 0.2;
+  }
+
+  renderAllShapes();
+  console.log(ev.keyCode);
 }
 
 
@@ -389,6 +452,11 @@ function updateAnimationAngles() {
     g_shiftAnimation = (45 * Math.sin(g_seconds));
   }
 }
+g_camera = new Camera();
+
+var g_eye = [0, 0, 3];
+var g_at = [0, 0, -100];
+var g_up = [0, 1, 0];
 
 function renderAllShapes() {
 
@@ -399,18 +467,47 @@ function renderAllShapes() {
   var scale = 0.35;
 
   var projMat = new Matrix4();
+  projMat.setPerspective(50, 1*canvas.width/canvas.height, 1, 100);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMat.elements);
 
+  // console.log(    g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2], 
+  //   g_camera.at.elements[0], g_camera.at.elements[1], g_camera.at.elements[2], 
+  //   g_camera.up.elements[0], g_camera.up.elements[1], g_camera.up.elements[2], );
   var viewMat = new Matrix4();
+  // viewMat.setLookAt(g_eye[0], g_eye[1], g_eye[2], g_at[0], g_at[1], g_at[2], g_up[0], g_up[1], g_up[2]);
+  viewMat.setLookAt(
+    g_camera.eye.elements[0], g_camera.eye.elements[1], g_camera.eye.elements[2], 
+    g_camera.at.elements[0], g_camera.at.elements[1], g_camera.at.elements[2], 
+    g_camera.up.elements[0], g_camera.up.elements[1], g_camera.up.elements[2], 
+  );
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMat.elements);
 
   // Pass the matrix to u_ModelMatrix attribute
-  var globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0).rotate(g_upAndDown, 1, 0, 0).scale(scale, scale, scale).rotate(-x_rot, 0, 1, 0).rotate(y_rot, 1, 0, 0);
+  var globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0).rotate(g_upAndDown, 1, 0, 0).scale(scale, scale, scale).rotate(-x_rot, 0, 1, 0).rotate(y_rot, 1, 0, 0).rotate(180,0,1,0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
+
+  // Draw the floor
+  var body = new Cube();
+  body.color = [1.0, 0.0, 0.0, 1.0];
+  body.textureNum = -3;
+  body.matrix.translate(0, -2.1, 0.0);
+  body.matrix.scale(50, 0, 50);
+  body.matrix.translate(-0.5, 0, -0.5);
+  body.render();
+
+  // Draw the sky
+  var sky = new Cube();
+  sky.color =   [1.0, 0.0, 0.0, 1.0];
+  sky.textureNum=0;
+  sky.matrix.scale(50,50,50);
+  sky.matrix.translate(-0.5,-0.5,-0.5);
+  sky.render();
+
 
   // Main body
   var bmo1 = new Cube();
   bmo1.color = [112 / 255, 170 / 255, 153 / 255, 1.0];
+  bmo1.textureNum = 0;
   bmo1.matrix.scale(2, 2.4, 1.4);
   bmo1.matrix.translate(-0.5, -0.5, -0.5);
   bmo1.render();
@@ -421,6 +518,7 @@ function renderAllShapes() {
   var bmo2 = new Cube();
   bmo2.matrix = bodyCoord;
   bmo2.color = [215 / 255, 254 / 255, 221 / 255, 1.0];
+  bmo2.textureNum = 0;
   bmo2.matrix.scale(.9, .5, .1);
   bmo2.matrix.translate(.05, .9, -0.01);
   bmo2.render();

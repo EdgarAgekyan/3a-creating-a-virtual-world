@@ -19,9 +19,18 @@ var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
+  uniform sampler2D u_Sampler0;
+  uniform int u_whichTexture;
   void main() {
-    gl_FragColor = u_FragColor;
-    gl_FragColor = vec4(v_UV, 1.0, 1.0);
+    if (u_whichTexture == -2) {
+      gl_FragColor = u_FragColor; // Use color
+    } else if (u_whichTexture == -1) {
+      gl_FragColor = vec4(v_UV, 1.0, 1.0); // Use UV debug color
+    } else if (u_whichTexture == 0) {
+      gl_FragColor = texture2D(u_Sampler0, v_UV); // use texture0
+    } else {
+      gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0); // error, put redish
+    }
   }`
 
 // Global Variables
@@ -37,6 +46,7 @@ let u_ViewMatrix;
 let u_GlobalRotateMatrix;
 let u_Sampler0;
 let u_whichTexture;
+let texture;
 
 function setupWebGL() {
   // Retrieve <canvas> element
@@ -110,6 +120,26 @@ function connectVariablesToGLSL() {
     console.log('Failed to get the storage location of u_ProjectionMatrix');
     return;
   }
+
+  u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
+  if (!u_Sampler0) {
+    console.log('Failed to get the storage location of u_Sampler0');
+    return;
+  }
+
+  u_whichTexture = gl.getUniformLocation(gl.program, 'u_whichTexture');
+  if (!u_whichTexture) {
+    console.log('Failed to get the storage location of u_whichTexture');
+    return;
+  }
+
+
+  // u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
+  // if (!u_Sampler0) {
+  //   console.log('Failed to create the u_Sampler0 object');
+  //   return false;
+  // }
+
 
   // u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
   // if (!u_Sampler0) {
@@ -210,6 +240,44 @@ function addActionsForHtmlUI() {
 
 }
 
+
+
+function initTextures() {
+
+  var image = new Image();
+  if (!image) {
+    console.log('Failed to create the image object');
+    return false;
+  }
+
+  // image.onload = function() {loadTexture(gl, n, texture, u_Sampler0, image);}
+
+  image.onload = function() {sendImageToTEXTURE0(image);}
+
+  image.src = 'sky.jpg';
+
+  return true;
+
+}
+
+function sendImageToTEXTURE0(image) {
+  texture = gl.createTexture();
+  if (!texture) {
+    console.log('Failed to create the texture object');
+    return false;
+  }
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+  gl.uniform1i(u_Sampler0, 0);
+
+  console.log('finished loadTexture');
+}
+
+
 function main() {
 
   // Set up canvas and gl variables
@@ -220,6 +288,7 @@ function main() {
   // Set up actions for the HTML UI elements
   addActionsForHtmlUI();
 
+  initTextures();
 
   // Register function (event handler) to be called on a mouse press
   canvas.onmousedown = click;
